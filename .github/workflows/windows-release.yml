@@ -1,0 +1,51 @@
+name: Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version matching tracker.py (for example 2.1.0)'
+        required: true
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Extract and verify source version
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
+          Expand-Archive Aion2Rader-source.zip source
+          $expected = "VERSION='$env:RELEASE_VERSION'"
+          if (-not (Select-String -Path source/tracker.py -SimpleMatch $expected -Quiet)) { throw 'Source version mismatch' }
+      - name: Build Windows executable
+        working-directory: source
+        run: |
+          python -m pip install pyinstaller==6.16.0
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name Aion2Rader --icon assets/aion2rader.ico --add-data "assets;assets" --add-data "zones;zones" --add-data "README.md;." tracker.py
+      - name: Package and create manifest
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          New-Item -ItemType Directory package | Out-Null
+          Copy-Item source/dist/Aion2Rader.exe package/
+          Copy-Item source/README.md package/
+          $name = "Aion2Rader-$env:RELEASE_VERSION-windows.zip"
+          Compress-Archive package/* $name
+          $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+          @{version=$env:RELEASE_VERSION; download_url="https://github.com/$env:REPOSITORY/releases/download/v$env:RELEASE_VERSION/$name"; sha256=$hash; notes='Windows executable update. See release notes.'} | ConvertTo-Json | Set-Content manifest.json -Encoding utf8
+      - name: Create draft release for Windows testing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$env:RELEASE_VERSION" "Aion2Rader-$env:RELEASE_VERSION-windows.zip" manifest.json --draft --title "Aion2Rader $env:RELEASE_VERSION" --notes "Draft: test launch, settings preservation, update/restart and uninstall before publishing. Portable executable; no installer included."
