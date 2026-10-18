@@ -1,51 +1,51 @@
-name: Windows release
+name: Windows V2.2 installer
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version matching tracker.py (for example 2.1.0)'
-        required: true
 permissions:
   contents: write
 jobs:
-  release:
+  build:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: source/Aion2Rader
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Extract and verify source version
-        shell: pwsh
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
+      - name: Extract source
+        working-directory: .
+        run: Expand-Archive Aion2Rader-V2.2-source.zip source
+      - name: Test source and verify version
         run: |
-          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid version' }
-          Expand-Archive Aion2Rader-source.zip source
-          $expected = "VERSION='$env:RELEASE_VERSION'"
-          if (-not (Select-String -Path source/tracker.py -SimpleMatch $expected -Quiet)) { throw 'Source version mismatch' }
+          python tests/test_updater_v22.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tests/test_logic.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -c "import tracker; assert tracker.VERSION == '2.2.0'"
       - name: Build Windows executable
-        working-directory: source
         run: |
-          python -m pip install pyinstaller==6.16.0
+          python -m pip install pyinstaller==6.22.3
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name Aion2Rader --icon assets/aion2rader.ico --add-data "assets;assets" --add-data "zones;zones" --add-data "README.md;." tracker.py
-      - name: Package and create manifest
-        shell: pwsh
-        env:
-          RELEASE_VERSION: ${{ inputs.version }}
-          REPOSITORY: ${{ github.repository }}
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+      - name: Build installer and manifest
         run: |
-          New-Item -ItemType Directory package | Out-Null
-          Copy-Item source/dist/Aion2Rader.exe package/
-          Copy-Item source/README.md package/
-          $name = "Aion2Rader-$env:RELEASE_VERSION-windows.zip"
-          Compress-Archive package/* $name
-          $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
-          @{version=$env:RELEASE_VERSION; download_url="https://github.com/$env:REPOSITORY/releases/download/v$env:RELEASE_VERSION/$name"; sha256=$hash; notes='Windows executable update. See release notes.'} | ConvertTo-Json | Set-Content manifest.json -Encoding utf8
-      - name: Create draft release for Windows testing
-        shell: pwsh
+          & "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe" /DMyAppVersion=2.2.0 Aion2Rader_Setup.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python publish_release.py --repository "$env:GITHUB_REPOSITORY" --version 2.2.0 --installer installer/Aion2Rader_Setup_v2.2.0.exe --out installer/release.json
+      - name: Test install, launch, updater handoff and uninstall
+        run: ./tests/windows-lifecycle.ps1
+      - name: Upload tested installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aion2Rader-Windows-V2.2
+          path: source/Aion2Rader/installer/*
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          gh release create "v$env:RELEASE_VERSION" "Aion2Rader-$env:RELEASE_VERSION-windows.zip" manifest.json --draft --title "Aion2Rader $env:RELEASE_VERSION" --notes "Draft: test launch, settings preservation, update/restart and uninstall before publishing. Portable executable; no installer included."
+          gh release create v2.2.0 installer/Aion2Rader_Setup_v2.2.0.exe installer/release.json --draft --title "Aion2Rader V2.2.0" --notes "Windows installer with uninstall support. Automated checks cover source logic, checksum rejection, installation, window launch, same-version installer handoff/restart, settings preservation and uninstall. A future-version download through the app UI has not been tested. Unsigned build."
