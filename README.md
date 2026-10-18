@@ -1,21 +1,23 @@
-# Aion2Rader
+# Aion2Rader V2.2
 
-Recovered source: V2.1.0. V2.2 was not found and is not claimed here.
+The V2.2 source is preserved in `Aion2Rader-V2.2-source.zip`. Extract its `Aion2Rader` folder to work on the application. The older V2.1 archive remains available.
 
-Aion2Rader-source.zip contains the original source and assets, excluding Python caches. Extract it to work on the application. No personal settings or credentials are included.
+## Windows download
 
-## Releases
+Use the Setup EXE from [Releases](https://github.com/Ilimited96/Aion2Rader/releases) once published. The source ZIP is not an installer. The installer build is currently being validated; no release is ready until the Windows workflow succeeds.
 
-The Windows workflow belongs at `.github/workflows/windows-release.yml`. Run it manually with the exact source version (currently 2.1.0). It builds a portable EXE ZIP, computes SHA-256, creates manifest.json, and uploads both to a **draft** release. Existing tags are not overwritten.
+## Updates
 
-Before publishing, download and test on Windows: launch without Python, schedules/assets/time zones, settings persistence, update from an older EXE through the manifest, restart into the new version, and failure on a bad checksum. This workflow has not yet been run or validated.
+New V2.2 installations default to this repository's update feed:
 
-After publishing a stable release, paste this URL in the app's Software Updates page:
+https://github.com/Ilimited96/Aion2Rader/releases/latest/download/release.json
 
-https://github.com/Ilimited96/Aion2Rader/releases/latest/download/manifest.json
+Existing saved update sources are preserved. If an older source is saved, replace it in the app's Updates page. This feed requires a published stable release containing both `release.json` and its matching Setup EXE. V2.1's ZIP manifest format is different; install V2.2 Setup once to move to installer updates.
 
-The URL will return 404 until a non-draft stable release includes manifest.json. The update ZIP must contain Aion2Rader.exe, not just source code. Source version and release version must match.
+## Build and validation
 
-## Installer and uninstall
+Run the Windows V2.2 installer workflow manually in Actions. It extracts the V2.2 source archive, runs logic and updater tests, builds the EXE and Inno Setup installer, tests install/launch/update handoff/settings preservation/uninstall on a fresh Windows runner, and creates a draft release. Build outputs are unsigned.
 
-This is a portable executable, not a Windows installer. An installer with an uninstall entry remains to be implemented and tested. The current updater stages versioned folders and launches the new EXE; it does not replace an installed program or update shortcuts. No end-to-end update or uninstall claim is made.
+The installer test exercises a same-version reinstall through the updater helper. A full future-version download and confirmation through the app UI still needs testing. Standard uninstall keeps user settings; the app offers separate data-removal choices.
+
+For future versions, update source/version and the workflow's version references, replace the archive, and build a new draft. Publish only the matching installer and generated release.json together after validation. No external GitHub access token is embedded in the app; the workflow uses GitHub's temporary repository token.
